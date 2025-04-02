@@ -21,9 +21,9 @@ struct ContentView: View {
                         .foregroundColor(.gray)
                     TextField("Search celestial objects...", text: $searchText)
                         .font(.system(size: 16))
-                        .onChange(of: searchText) { _ in
+                        .onChange(of: searchText) { oldValue, newValue in
                             Task {
-                                await performSearch(query: searchText)
+                                await performSearch(query: newValue)
                             }
                         }
                 }
@@ -33,7 +33,10 @@ struct ContentView: View {
                 .cornerRadius(10)
                 .padding()
                 
-                if astronomyService.isLoading {
+                if searchText.isEmpty {
+                    // Show APOD when no search
+                    APODView()
+                } else if astronomyService.isLoading {
                     ProgressView()
                 } else {
                     List(searchResults) { object in
