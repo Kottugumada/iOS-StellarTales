@@ -2,20 +2,19 @@ import Foundation
 
 // Make sure we're in the same module as SpaceObject
 struct AstronomyAPI {
+    static let shared = AstronomyAPI()
+    
     // NASA API key should be stored securely
     private let apiKey = "4XsTCdb681SD2xI86jRrvvdThScvTdXnUH1wg9rA"
     private let baseUrl = "https://api.nasa.gov"
     
     func fetchSpaceObject(name: String) async throws -> SpaceObject {
         let urlString = "\(baseUrl)/planetary/apod?api_key=\(apiKey)"
-        guard let url = URL(string: urlString) else {
+        guard let _ = URL(string: urlString) else {
             throw URLError(.badURL)
         }
         
-        let (data, _) = try await URLSession.shared.data(from: url)
-        let decoder = JSONDecoder()
-        
-        // Create a mock object for now
+        // Remove unused data fetch and decoder since we're returning mock data
         return SpaceObject(
             id: UUID(),
             title: name,
@@ -29,6 +28,78 @@ struct AstronomyAPI {
             visibility: nil,
             constellation: name
         )
+    }
+    
+    func fetchObjectData(name: String, type: SpaceObject.CelestialType, latitude: Double, longitude: Double) async throws -> AstronomicalData {
+        // Combine data from multiple sources
+        async let visibilityData = fetchVisibilityData(name: name, lat: latitude, lon: longitude)
+        async let objectDetails = fetchObjectDetails(name: name, type: type)
+        
+        let (visibility, details) = try await (visibilityData, objectDetails)
+        
+        return AstronomicalData(
+            riseTime: visibility.riseTime,
+            transitTime: visibility.transitTime,
+            setTime: visibility.setTime,
+            bestViewingTime: visibility.bestViewingTime,
+            magnitude: details.magnitude,
+            distance: details.distance
+        )
+    }
+    
+    private func fetchVisibilityData(name: String, lat: Double, lon: Double) async throws -> VisibilityData {
+        // Default values in case of API failure
+        return VisibilityData(
+            riseTime: "05:30 AM",
+            transitTime: "12:45 PM",
+            setTime: "07:30 PM",
+            bestViewingTime: "09:00 PM"
+        )
+        
+        // TODO: Implement actual API call
+        /*
+        let url = "https://api.astronomyapi.com/api/v2/bodies/positions/\(name)"
+        // Implement API call here
+        */
+    }
+    
+    private func fetchObjectDetails(name: String, type: SpaceObject.CelestialType) async throws -> ObjectDetails {
+        // Default values
+        return ObjectDetails(
+            magnitude: type == .star ? 1.5 : nil,
+            distance: 150.0
+        )
+        
+        // TODO: Implement actual API call based on type
+    }
+    
+    func fetchAPOD(count: Int = 10) async throws -> APODData {
+        // Use a direct, simple approach with a known working date
+        let urlString = "\(baseUrl)/planetary/apod?api_key=\(apiKey)&date=2024-03-15"
+        print("Fetching APOD with URL: \(urlString)")
+        
+        guard let url = URL(string: urlString) else {
+            throw APIError.invalidURL
+        }
+        
+        let (data, response) = try await URLSession.shared.data(from: url)
+        
+        guard let httpResponse = response as? HTTPURLResponse,
+              httpResponse.statusCode == 200 else {
+            throw APIError.invalidResponse
+        }
+        
+        // Print the raw response for debugging
+        if let jsonString = String(data: data, encoding: .utf8) {
+            print("Raw response: \(jsonString)")
+        }
+        
+        let decoder = JSONDecoder()
+        decoder.keyDecodingStrategy = .convertFromSnakeCase
+        
+        let apod = try decoder.decode(APODData.self, from: data)
+        print("Decoded APOD with title: \(apod.title) and media type: \(apod.mediaType ?? "unknown")")
+        return apod
     }
 }
 
@@ -153,9 +224,9 @@ struct WikiThumbnail: Codable {
 enum APIError: LocalizedError {
     case invalidURL
     case invalidResponse
-    case serverError(Int)
-    case networkError(String)
-    case noData
+    case noImageAvailable
+    case decodingError(String)
+    case networkError(String)  // Add this case
     
     var errorDescription: String? {
         switch self {
@@ -163,12 +234,62 @@ enum APIError: LocalizedError {
             return "Invalid URL"
         case .invalidResponse:
             return "Invalid response from server"
-        case .serverError(let code):
-            return "Server error: \(code)"
+        case .noImageAvailable:
+            return "No image available at this time"
+        case .decodingError(let message):
+            return "Decoding error: \(message)"
         case .networkError(let message):
             return "Network error: \(message)"
-        case .noData:
-            return "No data received"
         }
     }
 }
+
+struct AstronomicalData {
+    let riseTime: String
+    let transitTime: String
+    let setTime: String
+    let bestViewingTime: String
+    let magnitude: Double?
+    let distance: Double?
+}
+
+// Add these structures at the bottom of AstronomyAPI.swift
+
+struct VisibilityData {
+    let riseTime: String
+    let transitTime: String
+    let setTime: String
+    let bestViewingTime: String
+}
+
+struct ObjectDetails {
+    let magnitude: Double?
+    let distance: Double?
+}
+
+// API Response structures
+struct AstronomyAPIResponse: Codable {
+    let data: AstronomyData
+}
+
+struct AstronomyData: Codable {
+    let dates: [DateData]
+}
+
+struct DateData: Codable {
+    let rise: TimeData?
+    let set: TimeData?
+    let transit: TimeData?
+}
+
+struct TimeData: Codable {
+    let time: String
+}
+
+//struct APODData: Codable {
+  //  let date: String
+    //let explanation: String
+    //let url: String
+    //let title: String
+    //let copyright: String?
+//}
