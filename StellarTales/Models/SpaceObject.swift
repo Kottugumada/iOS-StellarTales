@@ -1,17 +1,17 @@
 import Foundation
 
-struct SpaceObject: Codable, Identifiable {
+struct SpaceObject: Identifiable {
     let id: UUID
     let title: String
     let summary: String
-    let detailedDescription: String
+    var detailedDescription: String
     let imageUrl: String
-    let mythology: String
+    var mythology: String
     
     // Astronomical Data
     let type: CelestialType
     let magnitude: Double?
-    let distance: Distance?
+    let distance: Double?
     let visibility: VisibilityTimes?
     let constellation: String?
     
@@ -31,7 +31,7 @@ struct SpaceObject: Codable, Identifiable {
         case star, constellation, planet, galaxy, nebula, cluster
     }
     
-    init(id: UUID = UUID(), title: String, summary: String, detailedDescription: String, imageUrl: String, mythology: String, type: CelestialType, magnitude: Double? = nil, distance: Distance? = nil, visibility: VisibilityTimes? = nil, constellation: String? = nil) {
+    init(id: UUID = UUID(), title: String, summary: String, detailedDescription: String, imageUrl: String, mythology: String, type: CelestialType, magnitude: Double? = nil, distance: Double? = nil, visibility: VisibilityTimes? = nil, constellation: String? = nil) {
         self.id = id
         self.title = title
         self.summary = summary
@@ -43,5 +43,29 @@ struct SpaceObject: Codable, Identifiable {
         self.distance = distance
         self.visibility = visibility
         self.constellation = constellation
+    }
+    
+    mutating func fetchMythology() async {
+        do {
+            let geminiMythology = try await GeminiService.shared.fetchContent(
+                for: title,
+                type: .mythology
+            )
+            self.mythology = geminiMythology
+        } catch {
+            self.mythology = "Unable to fetch mythology at this time."
+        }
+    }
+    
+    mutating func fetchDetailedDescription() async {
+        do {
+            let scientificDetails = try await GeminiService.shared.fetchContent(
+                for: title,
+                type: .scientific
+            )
+            self.detailedDescription = scientificDetails
+        } catch {
+            self.detailedDescription = "Unable to fetch scientific details at this time."
+        }
     }
 } 

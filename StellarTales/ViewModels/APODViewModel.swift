@@ -12,28 +12,25 @@ class APODViewModel: ObservableObject {
         }
     }
     
-    func fetchAPOD() {
+    func fetchAPOD() async {
         isLoading = true
         error = nil
+        apodData = nil  // Clear existing data to ensure view updates
         
-        Task {
-            do {
-                // Try to fetch with multiple days
-                let data = try await AstronomyAPI.shared.fetchAPOD(count: 10)
-                self.apodData = data
-                self.isLoading = false
-            } catch {
-                // If that fails, try specific date range
-                do {
-                    let data = try await fetchRecentImage()
-                    self.apodData = data
-                    self.isLoading = false
-                } catch {
-                    self.error = error.localizedDescription
-                    self.isLoading = false
-                }
+        do {
+            let newData = try await AstronomyAPI.shared.fetchAPOD()
+            // Ensure we're getting a different image
+            if newData.url != apodData?.url {
+                apodData = newData
+            } else {
+                // Try again if we got the same image
+                return await fetchAPOD()
             }
+        } catch {
+            self.error = error.localizedDescription
         }
+        
+        isLoading = false
     }
     
     private func fetchRecentImage() async throws -> APODData {

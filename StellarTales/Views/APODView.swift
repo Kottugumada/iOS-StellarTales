@@ -3,60 +3,87 @@ import WebKit
 
 struct APODView: View {
     @StateObject private var viewModel = APODViewModel()
+    @Environment(\.scenePhase) private var scenePhase
     
     var body: some View {
-        VStack(spacing: 16) {
+        VStack {
             if viewModel.isLoading {
                 ProgressView()
                     .frame(height: 200)
             } else if let apod = viewModel.apodData {
-                AsyncImage(url: URL(string: apod.url)) { phase in
-                    switch phase {
-                    case .empty:
-                        ProgressView()
-                            .frame(height: 200)
-                    case .success(let image):
-                        image
-                            .resizable()
-                            .aspectRatio(contentMode: .fit)
-                            .cornerRadius(12)
-                    case .failure(_):
-                        FallbackView()
-                    @unknown default:
-                        FallbackView()
-                    }
-                }
-                .frame(maxHeight: 300)
-                
-                VStack(alignment: .leading, spacing: 12) {
-                    Text(apod.title)
-                        .font(.title2)
-                        .fontWeight(.bold)
-                    
-                    HStack {
-                        Text(apod.date)
-                            .font(.subheadline)
-                        if let copyright = apod.copyright {
-                            Spacer()
-                            Text("© \(copyright)")
-                                .font(.caption)
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 16) {
+                        AsyncImage(url: URL(string: apod.url)) { phase in
+                            switch phase {
+                            case .empty:
+                                ProgressView()
+                                    .frame(height: 200)
+                            case .success(let image):
+                                image
+                                    .resizable()
+                                    .aspectRatio(contentMode: .fit)
+                                    .cornerRadius(12)
+                            case .failure(_):
+                                Image(systemName: "photo")
+                                    .font(.largeTitle)
+                                    .frame(height: 200)
+                            @unknown default:
+                                EmptyView()
+                            }
+                        }
+                        
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text(apod.title)
+                                .font(.title2)
+                                .fontWeight(.bold)
+                            
+                            Text(apod.date)
+                                .font(.subheadline)
+                                .foregroundColor(.secondary)
+                            
+                            if let copyright = apod.copyright {
+                                Text("© \(copyright)")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            }
+                            
+                            Text(apod.explanation)
+                                .font(.body)
+                                .padding(.top, 4)
                         }
                     }
-                    .foregroundColor(.secondary)
-                    
-                    Text(apod.explanation)
-                        .font(.body)
-                        .lineSpacing(4)
+                    .padding()
+                }
+                .refreshable {
+                    print("Refreshing APOD...")  // Debug print
+                    await viewModel.fetchAPOD()
+                }
+            } else if let error = viewModel.error {
+                VStack(spacing: 16) {
+                    Image(systemName: "exclamationmark.triangle")
+                        .font(.largeTitle)
+                        .foregroundColor(.orange)
+                    Text(error)
+                        .multilineTextAlignment(.center)
+                    Button("Try Again") {
+                        Task {
+                            await viewModel.fetchAPOD()
+                        }
+                    }
                 }
                 .padding()
-            } else if let error = viewModel.error {
-                ErrorView(message: error)
-                    .onTapGesture {
-                        viewModel.fetchAPOD()
-                    }
             }
         }
-        .padding()
+        .onChange(of: scenePhase) { newPhase in
+            if newPhase == .active {
+                Task {
+                    await viewModel.fetchAPOD()
+                }
+            }
+        }
+        .task {
+            await viewModel.fetchAPOD()
+        }
     }
 }
 

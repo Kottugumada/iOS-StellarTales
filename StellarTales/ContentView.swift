@@ -40,7 +40,7 @@ struct ContentView: View {
                     ProgressView()
                 } else {
                     List(searchResults) { object in
-                        NavigationLink(destination: CelestialObjectDetailView(object: object)) {
+                        NavigationLink(destination: CelestialObjectDetailView(spaceObject: object)) {
                             CelestialObjectRowView(object: object)
                         }
                     }
