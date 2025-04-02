@@ -4,8 +4,7 @@ import Foundation
 struct AstronomyAPI {
     static let shared = AstronomyAPI()
     
-    // NASA API key should be stored securely
-    private let apiKey = "4XsTCdb681SD2xI86jRrvvdThScvTdXnUH1wg9rA"
+    private let apiKey = AppSecrets.nasaKey
     private let baseUrl = "https://api.nasa.gov"
     
     func fetchSpaceObject(name: String) async throws -> SpaceObject {
@@ -74,32 +73,52 @@ struct AstronomyAPI {
     }
     
     func fetchAPOD(count: Int = 10) async throws -> APODData {
-        // Use a direct, simple approach with a known working date
-        let urlString = "\(baseUrl)/planetary/apod?api_key=\(apiKey)&date=2024-03-15"
-        print("Fetching APOD with URL: \(urlString)")
+        // Get random date within last 30 days to ensure variety
+        let calendar = Calendar.current
+        let today = Date()
+        let randomDays = Int.random(in: 0...30)
+        let randomDate = calendar.date(byAdding: .day, value: -randomDays, to: today) ?? today
+        
+        let dateFormatter = DateFormatter()
+        dateFormatter.dateFormat = "yyyy-MM-dd"
+        let dateString = dateFormatter.string(from: randomDate)
+        
+        let urlString = "\(baseUrl)/planetary/apod?api_key=\(apiKey)&date=\(dateString)"
+        print("Fetching APOD for date: \(dateString)")
         
         guard let url = URL(string: urlString) else {
             throw APIError.invalidURL
         }
         
-        let (data, response) = try await URLSession.shared.data(from: url)
+        // Create URLRequest with cache policy
+        var request = URLRequest(url: url)
+        request.cachePolicy = URLRequest.CachePolicy.reloadIgnoringLocalAndRemoteCacheData
         
-        guard let httpResponse = response as? HTTPURLResponse,
-              httpResponse.statusCode == 200 else {
-            throw APIError.invalidResponse
+        do {
+            let (data, response) = try await URLSession.shared.data(for: request)
+            
+            guard let httpResponse = response as? HTTPURLResponse,
+                  httpResponse.statusCode == 200 else {
+                throw APIError.invalidResponse
+            }
+            
+            let decoder = JSONDecoder()
+            decoder.keyDecodingStrategy = .convertFromSnakeCase
+            
+            let apod = try decoder.decode(APODData.self, from: data)
+            
+            // If we get a video, try another random date
+            if apod.mediaType != "image" {
+                if count > 0 {
+                    return try await fetchAPOD(count: count - 1)
+                }
+            }
+            
+            return apod
+        } catch {
+            print("APOD fetch error: \(error)")
+            throw error
         }
-        
-        // Print the raw response for debugging
-        if let jsonString = String(data: data, encoding: .utf8) {
-            print("Raw response: \(jsonString)")
-        }
-        
-        let decoder = JSONDecoder()
-        decoder.keyDecodingStrategy = .convertFromSnakeCase
-        
-        let apod = try decoder.decode(APODData.self, from: data)
-        print("Decoded APOD with title: \(apod.title) and media type: \(apod.mediaType ?? "unknown")")
-        return apod
     }
 }
 
@@ -112,7 +131,7 @@ enum AstronomyAPIError: Error {
 
 class AstronomyService: ObservableObject {
     // Define the API key and base URL as properties
-    private let nasaApiKey = "4XsTCdb681SD2xI86jRrvvdThScvTdXnUH1wg9rA" // Replace with your actual NASA API key
+    private let nasaApiKey = "4XsTCdb681SD2xI86jRrvvdThScvTdXnUH1wg9rA" 
     private let baseUrl = "https://api.nasa.gov"
     
     @Published var isLoading = false
@@ -285,11 +304,3 @@ struct DateData: Codable {
 struct TimeData: Codable {
     let time: String
 }
-
-//struct APODData: Codable {
-  //  let date: String
-    //let explanation: String
-    //let url: String
-    //let title: String
-    //let copyright: String?
-//}
